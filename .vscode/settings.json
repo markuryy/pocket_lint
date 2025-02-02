@@ -1,0 +1,19 @@
+{
+    "C_Cpp.intelliSenseEngine": "Tag Parser",
+    "cmake.configureOnOpen": false,
+    "arduino.useArduinoCli": true,
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "arduino.path": "/opt/homebrew/bin/arduino-cli",
+    "arduino.commandPath": "",
+    "arduino.logLevel": "verbose",
+    "arduino.allowPDEFiletype": false,
+    "arduino.enableUSBDetection": true,
+    "arduino.disableTestingOpen": false,
+    "arduino.skipHeaderProvider": false,
+    "arduino.additionalUrls": [
+        "https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json"
+    ]
+} 
