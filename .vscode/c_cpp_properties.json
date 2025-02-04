@@ -34,7 +34,7 @@
             ],
             "intelliSenseMode": "gcc-x64",
             "includePath": [
-                "/Users/mark/Downloads/LINT_v1/arduino_projects/googly_eyes",
+                "/Users/mark/Downloads/LINT_v1/arduino_projects/googly_ble",
                 "/Users/mark/Library/Arduino15/packages/esp32/tools/esp32-arduino-libs/idf-release_v5.3-083aad99-v2/esp32s3/qio_qspi/include",
                 "/Users/mark/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/cores/esp32",
                 "/Users/mark/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/variants/waveshare_esp32_s3_lcd_169",
@@ -44,6 +44,7 @@
                 "/Users/mark/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/libraries/Wire/src",
                 "/Users/mark/Documents/Arduino/libraries/SensorLib/src",
                 "/Users/mark/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/libraries/Preferences/src",
+                "/Users/mark/Library/Arduino15/packages/esp32/hardware/esp32/3.1.0/libraries/BLE/src",
                 "/Users/mark/Library/Arduino15/packages/esp32/tools/esp-x32/2405/xtensa-esp-elf/include/c++/13.2.0",
                 "/Users/mark/Library/Arduino15/packages/esp32/tools/esp-x32/2405/xtensa-esp-elf/include/c++/13.2.0/xtensa-esp-elf/esp32s3",
                 "/Users/mark/Library/Arduino15/packages/esp32/tools/esp-x32/2405/xtensa-esp-elf/include/c++/13.2.0/backward",
