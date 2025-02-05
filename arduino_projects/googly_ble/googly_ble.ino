@@ -20,8 +20,8 @@ const int powerOutputPin = 41;             // SYS_EN pin for power control
 const int powerInputPin  = 40;             // Button input pin
 
 // Timing constants
-const unsigned long LONG_PRESS_TIME   = 3000;   // 3 sec long press to power off
-const unsigned long DOUBLE_CLICK_TIME = 300;    // 300ms double-click threshold
+const unsigned long LONG_PRESS_TIME = 3000;    // 3 sec for power off
+const unsigned long MEDIUM_PRESS_TIME = 1500;  // 1.5 sec for calibration
 const uint32_t BLE_MODE_TIMEOUT       = 30000;   // 30 sec inactivity auto–revert in BLE mode
 
 // Smoothing factor for pupil motion
@@ -136,6 +136,7 @@ struct ImageState {
   bool isReceiving;       // flag if transfer is active
   uint8_t currentGroup;   // group packet counter (for ack)
   bool groupPackets[50];  // group packet status (placeholder for future enhancements)
+  bool imageDisplayed;    // flag to indicate we're displaying a static image
 } imgState;
 
 // Buffer for one line of pixel data (allocated when image starts)
@@ -262,7 +263,10 @@ void showCalibrationDebug() {
 
 // Begin calibration: reset all calibration data and start with BOTTOM orientation.
 void startCalibration() {
+  // Reset all calibration-related state
+  memset(&calibrationData, 0, sizeof(calibrationData));  // Clear all calibration data
   calibrationData.isValid = false;
+  currentMode = OPERATION_EYES;
   debugMode = false;
   currentOrientation = CAL_ORIENT_BOTTOM;
   currentCalStep = CAL_PROMPT;
@@ -270,6 +274,9 @@ void startCalibration() {
   memset(calSampleSum, 0, sizeof(calSampleSum));
   calStepStartTime = millis();
   calButtonTriggered = false;
+  
+  // Clear display and show initial calibration message
+  lv_obj_clean(lv_scr_act());
   showLVGLMessage("Calibration:\nPlace me on my BOTTOM side\nand press the button.");
   USBSerial.println("Starting calibration: BOTTOM");
 }
@@ -490,9 +497,15 @@ void processPixelData(const uint8_t* data, size_t len) {
     snprintf(msg, sizeof(msg), "Complete: %.1f KB/s", speed/1024.0f);
     showBLEMessage(msg, 0x07E0); // green text
     imgState.isReceiving = false;
+    imgState.imageDisplayed = true;  // Set the flag
     if (lineBuffer) {
       free(lineBuffer);
       lineBuffer = NULL;
+    }
+    
+    // Stop advertising since we're displaying an image
+    if (pServer) {
+      pServer->getAdvertising()->stop();
     }
   }
 }
@@ -508,18 +521,21 @@ void enterBLEMode() {
   // Clear any LVGL UI while using direct gfx drawing.
   lv_obj_clean(lv_scr_act());
   gfx->fillScreen(0);
-  showBLEMessage("BLE Mode:\nAdvertising...");
   
-  // Reset image transfer state.
-  memset(&imgState, 0, sizeof(imgState));
-  if (lineBuffer) {
-    free(lineBuffer);
-    lineBuffer = NULL;
+  // Only start advertising if we're not displaying an image
+  if (!imgState.imageDisplayed) {
+    showBLEMessage("BLE Mode:\nAdvertising...");
+    // Reset image transfer state.
+    memset(&imgState, 0, sizeof(imgState));
+    if (lineBuffer) {
+      free(lineBuffer);
+      lineBuffer = NULL;
+    }
+    
+    // Start BLE advertising
+    if (pServer)
+      pServer->getAdvertising()->start();
   }
-  
-  // Start BLE advertising (if not already advertising).
-  if (pServer)
-    pServer->getAdvertising()->start();
   
   lastBLEActivity = millis();
 }
@@ -559,7 +575,6 @@ void handleButton() {
   int buttonState = digitalRead(powerInputPin);
   static bool wasPressed = false;
   static unsigned long pressStart = 0;
-  static unsigned long lastClickTime = 0;
   
   if (buttonState == LOW && !wasPressed) {
     pressStart = millis();
@@ -574,8 +589,13 @@ void handleButton() {
       delay(500);
       digitalWrite(powerOutputPin, LOW);  // Shut down power via the SYS_EN line
     }
+    else if (pressDuration >= MEDIUM_PRESS_TIME) {
+      // Medium press triggers calibration
+      startCalibration();
+      USBSerial.println("Medium press: Starting calibration.");
+    }
     else {
-      // If calibration is not yet complete or in debug mode, follow calibration actions.
+      // Short press handles either calibration steps or mode switching
       if (!calibrationData.isValid || debugMode) {
         if (currentCalStep == CAL_PROMPT) {
           calButtonTriggered = true;
@@ -587,19 +607,10 @@ void handleButton() {
         }
       }
       else {
-        // Operational mode switching – also check for double–click to re–start calibration (only in eyes mode).
-        unsigned long now = millis();
-        if ((now - lastClickTime) <= DOUBLE_CLICK_TIME && currentMode == OPERATION_EYES) {
-          startCalibration();
-          USBSerial.println("Double–click: Restarting calibration.");
-        } else {
-          // A single short press toggles between modes.
-          if (currentMode == OPERATION_EYES)
-            enterBLEMode();
-          else  // currentMode == OPERATION_BLE
-            exitBLEMode();
-        }
-        lastClickTime = now;
+        if (currentMode == OPERATION_EYES)
+          enterBLEMode();
+        else  // currentMode == OPERATION_BLE
+          exitBLEMode();
       }
     }
   }
@@ -735,8 +746,7 @@ void setup() {
   // Load calibration data.
   loadCalibration();
   if (calibrationData.isValid) {
-    debugMode = true;  // Enter debug mode so calibration data stays on screen.
-    showCalibrationDebug();
+    createEyes();  // Go straight to eyes mode if we have calibration
     USBSerial.println("Using stored calibration.");
   } else {
     startCalibration();
@@ -785,8 +795,8 @@ void loop() {
     }
   }
   else if (currentMode == OPERATION_BLE) {
-    // In BLE mode, if no BLE activity for a set time, automatically revert to eyes mode.
-    if (millis() - lastBLEActivity > BLE_MODE_TIMEOUT) {
+    // Only check for timeout if we're not displaying an image
+    if (!imgState.imageDisplayed && millis() - lastBLEActivity > BLE_MODE_TIMEOUT) {
       exitBLEMode();
     }
   }
