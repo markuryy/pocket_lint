@@ -518,23 +518,22 @@ void enterBLEMode() {
   currentMode = OPERATION_BLE;
   USBSerial.println("Switching to BLE mode");
   
-  // Clear any LVGL UI while using direct gfx drawing.
   lv_obj_clean(lv_scr_act());
   gfx->fillScreen(0);
   
-  // Only start advertising if we're not displaying an image
   if (!imgState.imageDisplayed) {
     showBLEMessage("BLE Mode:\nAdvertising...");
-    // Reset image transfer state.
     memset(&imgState, 0, sizeof(imgState));
     if (lineBuffer) {
       free(lineBuffer);
       lineBuffer = NULL;
     }
     
-    // Start BLE advertising
-    if (pServer)
+    if (pServer) {
       pServer->getAdvertising()->start();
+    }
+  } else {
+    showBLEMessage("BLE Mode:\nPress button to advertise");
   }
   
   lastBLEActivity = millis();
@@ -595,22 +594,35 @@ void handleButton() {
       USBSerial.println("Medium press: Starting calibration.");
     }
     else {
-      // Short press handles either calibration steps or mode switching
+      // Short press handling
       if (!calibrationData.isValid || debugMode) {
         if (currentCalStep == CAL_PROMPT) {
           calButtonTriggered = true;
         }
         else if (debugMode) {
           debugMode = false;
-          createEyes();  // Exit calibration debug mode and show eyes
+          createEyes();
           USBSerial.println("Exiting calibration debug mode, showing eyes.");
         }
       }
       else {
-        if (currentMode == OPERATION_EYES)
+        if (currentMode == OPERATION_EYES) {
           enterBLEMode();
-        else  // currentMode == OPERATION_BLE
-          exitBLEMode();
+        }
+        else {  // currentMode == OPERATION_BLE
+          if (imgState.imageDisplayed) {
+            // If displaying image, first press restarts advertising
+            imgState.imageDisplayed = false;
+            showBLEMessage("BLE Mode:\nAdvertising...");
+            if (pServer) {
+              pServer->getAdvertising()->start();
+            }
+            lastBLEActivity = millis();
+          } else {
+            // If already advertising or no image, switch back to eyes
+            exitBLEMode();
+          }
+        }
       }
     }
   }
@@ -629,9 +641,12 @@ class MyServerCallbacks: public BLEServerCallbacks {
   
   void onDisconnect(BLEServer* pServer) {
     USBSerial.println("BLE Client disconnected");
-    if (currentMode == OPERATION_BLE) {
+    if (currentMode == OPERATION_BLE && !imgState.imageDisplayed) {
       showBLEMessage("Client disconnected\nAdvertising...");
       pServer->getAdvertising()->start();
+    } else if (currentMode == OPERATION_BLE && imgState.imageDisplayed) {
+      // If we're displaying an image, just show status but don't restart advertising
+      showBLEMessage("Client disconnected\nPress button to advertise");
     }
   }
 };
@@ -786,7 +801,6 @@ void loop() {
   handleButton();
   
   if (currentMode == OPERATION_EYES) {
-    // In eyes mode: if calibration is ongoing, run the calibration state machine.
     if (!calibrationData.isValid || debugMode) {
       handleCalibration();
     }
@@ -795,9 +809,13 @@ void loop() {
     }
   }
   else if (currentMode == OPERATION_BLE) {
-    // Only check for timeout if we're not displaying an image
+    // Only check timeout if we're advertising (not displaying image)
     if (!imgState.imageDisplayed && millis() - lastBLEActivity > BLE_MODE_TIMEOUT) {
-      exitBLEMode();
+      // Stop advertising but stay in BLE mode if we have an image
+      if (pServer) {
+        pServer->getAdvertising()->stop();
+      }
+      showBLEMessage("BLE timeout\nPress button to advertise");
     }
   }
   
